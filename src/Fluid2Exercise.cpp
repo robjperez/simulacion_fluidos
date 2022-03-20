@@ -11,6 +11,7 @@ namespace
 ////////////////////////////////////////////////
 }  // namespace
 
+
 // advection
 void Fluid2::fluidAdvection(const float dt)
 {
@@ -25,50 +26,209 @@ void Fluid2::fluidAdvection(const float dt)
         // Recorremos todas las celdillas
         auto inkCopy = Array2<asa::Vector3>(inkRGB);
 
-        auto &u = getVelocityX();
-        auto &v = getVelocityY();
+        auto &uRef = getVelocityX();
+        auto &vRef = getVelocityY();
         for (int i = 0; i < grid.getSize().x; i++) {
-            for (int j = 0; i < grid.getSize().y; j++) {
+            for (int j = 0; j < grid.getSize().y; j++) {
                 // Convierto el i j a la posicion
-                auto pos = grid.getCellPos(Index2(i, j));
+                auto index = Index2(i, j);
+                auto pos = grid.getCellPos(index);
                 // pos es x, y del espacio
-                auto ux = u[Index2(pos.x, pos.y)];
-                auto ux1 = u[Index2(pos.x+1, pos.y)];
-                auto inter = ux + ux1 / 2;
-
+                auto ux0 = uRef[index];
+                auto ux1 = uRef[Index2(index.x+1, index.y)];
                 
+                auto uy0 = vRef[index];
+                auto uy1 = vRef[Index2(index.x, index.y + 1)];
+
+                auto v = lerp(uy0, uy1, 0.5f);
+                auto u = lerp(ux0, ux1, 0.5f);
+
+                // Calculo la posicion antigua
+                auto oldPos = Vector2(pos.x - (dt * u), pos.y - (dt * v));
+
+                // Interpolo el valor entre los 4 puntos circundantes
+                auto oldCell = grid.getCellIndex(oldPos);
+                auto oldIndex = Index2(oldCell.x, oldCell.y);
+                auto oldCellPos = grid.getCellPos(oldIndex);
+                Index2 aa, ab, ba, bb;
+                if (oldPos.x > oldCellPos.x && oldPos.y > oldCellPos.y) {
+                    aa = oldIndex;
+                    ba = right(oldIndex);
+                    ab = up(oldIndex);                    
+                    bb = right(up(oldIndex));                    
+                } else if (oldPos.x > oldCellPos.x && oldPos.y < oldCellPos.y) {
+                    aa = down(oldIndex);                    
+                    ba = left(down(oldIndex));                    
+                    ab = oldIndex;
+                    bb = right(oldIndex);                    
+                } else if (oldPos.x < oldCellPos.x && oldPos.y > oldCellPos.y) {
+                    aa = left(oldIndex);                    
+                    ba = oldIndex;
+                    ab = left(down(oldIndex));                    
+                    bb = up(oldIndex);                    
+                } else {
+                    aa = left(down(oldIndex));                    
+                    ba = down(oldIndex);                    
+                    ab = left(oldIndex);                    
+                    bb = oldIndex;
+                }      
+
+                auto aaPos = grid.getCellPos(aa);
+                float tx = oldPos.x - aaPos.x;
+                tx = clamp(tx, 0, 1);
+                float ty = oldPos.y - aaPos.y;
+                ty = clamp(ty, 0, 1);
+                
+                auto inkAA = inkCopy.getValue(aa);
+                auto inkBA = inkCopy.getValue(ba);
+                auto inkAB = inkCopy.getValue(ab);                
+                auto inkBB = inkCopy.getValue(bb);
+
+                auto newVal = bilerp(
+                    inkAA, inkBA, inkAB, inkBB, tx, ty);
+                inkRGB.setValue(index, newVal);                
                 // Primero obtengo la velocidad en esta posicion
                 // interpolar los valores, sumar los valores y dividir entre dos por cada eje 
 
                 // Una vez tengo los valores, ya tengo u, y v para hacer la posicion en x(t - dt)
 
-                // Ahora x es posicion del espacio, hay que convertir a indices del grid
-
-                
+                // Ahora x es posicion del espacio, hay que convertir a indices del grid                
             }
         }
     }
 
     {        
         // Igual que lo otro
-        for (int i = 0; i < grid.getSize().x; i++) {
-            for (int j = 0; i < grid.getSize().y; j++) {
-                // Convierto el i j a la posicion
-                auto pos = grid.getCellPos(Index2(i, j));
-                // pos es x, y del espacio
+        //for (int i = 0; i < grid.getSize().x; i++) {
+        //    for (int j = 0; i < grid.getSize().y; j++) {
+        //        // Convierto el i j a la posicion
+        //        auto pos = grid.getCellPos(Index2(i, j));
+        //        // pos es x, y del espacio
 
-                // Primero obtengo la velocidad en esta posicion
-                // interpolar los valores, sumar los valores y dividir entre dos por cada eje
-            }
-        }
+        //        // Primero obtengo la velocidad en esta posicion
+        //        // interpolar los valores, sumar los valores y dividir entre dos por cada eje
+        //    }
+        //}
         // Velocity acvection term HERE
         // x(t − dt) = x(t) + dt * (−u)
-        for (int i = 0; i < grid.getSize().x; i++) {
+        /*for (int i = 0; i < grid.getSize().x; i++) {
             for (int j = 0; i < grid.getSize().y; j++) {
                 auto pos = grid.getCellPos(Index2(i, j));                
                 auto prevX = i + dt * getVelocityX();
 
                          auto nuevoPos = pos + dt * (-v)
+            }
+        }*/
+
+        auto uCopy = Array2<float>(getVelocityX());
+        auto vCopy = Array2<float>(getVelocityY());
+        auto &uRef = getVelocityX();
+        auto &vRef = getVelocityY();
+        
+        for (int i = 0; i < grid.getSize().x; i++) {
+            for (int j = 0; j < grid.getSize().y; j++) {
+                // Convierto el i j a la posicion
+                auto index = Index2(i, j);
+                auto uPos = grid.getFaceXPos(index);
+                auto vPos = grid.getFaceYPos(index);
+
+                // pos es x, y del espacio
+                auto ux0 = uCopy[index];
+                auto ux1 = uCopy[Index2(index.x + 1, index.y)];
+
+                auto uy0 = vCopy[index];
+                auto uy1 = vCopy[Index2(index.x, index.y + 1)];
+
+                auto v = lerp(uy0, uy1, 0.5f);
+                auto u = lerp(ux0, ux1, 0.5f);
+
+                // Calculo la posicion antigua
+                auto oldUPos = Vector2(uPos.x - (dt * u), uPos.y - (dt * v));
+                auto oldVPos = Vector2(vPos.x - (dt * u), vPos.y - (dt * v));
+
+                // Interpolo el valor entre los 4 puntos circundantes
+                auto oldUCell = grid.getCellIndex(oldUPos);
+                auto oldVCell = grid.getCellIndex(oldVPos);
+
+                auto oldUIndex = Index2(oldUCell.x, oldUCell.y);
+                auto oldVIndex = Index2(oldVCell.x, oldVCell.y);
+
+                auto oldUCellPos = grid.getFaceXPos(oldUIndex);
+                auto oldVCellPos = grid.getFaceYPos(oldVIndex);
+
+                Index2 aaU, abU, baU, bbU;
+                Index2 aaV, abV, baV, bbV;
+
+                if (oldUPos.x > oldUCellPos.x && oldUPos.y > oldUCellPos.y) {
+                    aaU = oldUIndex;
+                    baU = right(oldUIndex);
+                    abU = up(oldUIndex);
+                    bbU = right(up(oldUIndex));
+                } else if (oldUPos.x > oldUCellPos.x && oldUPos.y < oldUCellPos.y) {
+                    aaU = down(oldUIndex);
+                    baU = left(down(oldUIndex));
+                    abU = oldUIndex;
+                    bbU = right(oldUIndex);
+                } else if (oldUPos.x < oldUCellPos.x && oldUPos.y > oldUCellPos.y) {
+                    aaU = left(oldUIndex);
+                    baU = oldUIndex;
+                    abU = left(down(oldUIndex));
+                    bbU = up(oldUIndex);
+                } else {
+                    aaU = left(down(oldUIndex));
+                    baU = down(oldUIndex);
+                    abU = left(oldUIndex);
+                    bbU = oldUIndex;
+                }
+
+                auto aaUPos = grid.getCellPos(aaU);
+                float txU = oldUPos.x - aaUPos.x;
+                txU = clamp(txU, 0, 1);
+                float tyU = oldUPos.y - aaUPos.y;
+                tyU = clamp(tyU, 0, 1);
+
+                auto uAA = uCopy.getValue(aaU);
+                auto uBA = uCopy.getValue(baU);
+                auto uAB = uCopy.getValue(abU);
+                auto uBB = uCopy.getValue(bbU);
+
+                auto newUVal = bilerp(uAA, uBA, uAB, uBB, txU, tyU);
+
+                if (oldVPos.x > oldVCellPos.x && oldVPos.y > oldVCellPos.y) {
+                    aaV = oldVIndex;
+                    baV = right(oldVIndex);
+                    abV = up(oldVIndex);
+                    bbV = right(up(oldVIndex));
+                } else if (oldUPos.x > oldVCellPos.x && oldVPos.y < oldVCellPos.y) {
+                    aaV = down(oldVIndex);
+                    baV = left(down(oldVIndex));
+                    abV = oldVIndex;
+                    bbV = right(oldVIndex);
+                } else if (oldUPos.x < oldVCellPos.x && oldVPos.y > oldVCellPos.y) {
+                    aaV = left(oldVIndex);
+                    baV = oldVIndex;
+                    abV = left(down(oldVIndex));
+                    bbV = up(oldVIndex);
+                } else {
+                    aaV = left(down(oldVIndex));
+                    baV = down(oldVIndex);
+                    abV = left(oldVIndex);
+                    bbV = oldVIndex;
+                }
+
+                auto aaVPos = grid.getCellPos(aaV);
+                float txV = oldVPos.x - aaVPos.x;
+                txV = clamp(txV, 0, 1);
+                float tyV = oldVPos.y - aaVPos.y;
+                tyV = clamp(tyV, 0, 1);
+
+                auto vAA = vCopy.getValue(aaV);
+                auto vBA = vCopy.getValue(baV);
+                auto vAB = vCopy.getValue(abV);
+                auto vBB = vCopy.getValue(bbV);
+
+                auto newVVal = bilerp(vAA, vBA, vAB, vBB, txV, tyV);                
+                // uRef[index] = newVal;
             }
         }
     }
@@ -141,5 +301,22 @@ void Fluid2::fluidPressureProjection(const float dt)
         // nueva velocidad = velocidad antigua - dt / densidad * Pi+1,j - Pi,j / dx
 
     }
+}
+Index2 Fluid2::left(Index2 &index)
+{
+    return Index2(clamp(index.x - 1, 0, index.x - 1), index.y);
+}
+
+Index2 Fluid2::right(Index2 &index)
+{
+    return Index2(clamp(index.x + 1, index.x + 1, grid.getSize().x), index.y);
+}
+Index2 Fluid2::up(Index2 &index)
+{
+    return Index2(index.x, clamp(index.y + 1, index.y + 1, grid.getSize().y));
+}
+Index2 Fluid2::down(Index2 &index)
+{
+    return Index2(index.x, clamp(index.y - 1, 0, index.y - 1));
 }
 }  // namespace asa

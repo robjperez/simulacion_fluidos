@@ -57,6 +57,12 @@ public:
     // pressure
     void fluidPressureProjection(const float dt);
 
+private:
+    Index2 left(Index2 &index);
+    Index2 right(Index2 &index);
+    Index2 up(Index2 &index);
+    Index2 down(Index2 &index);
+
 public:
     Grid2 grid;
 
