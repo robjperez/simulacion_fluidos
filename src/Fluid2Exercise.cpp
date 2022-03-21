@@ -26,19 +26,17 @@ void Fluid2::fluidAdvection(const float dt)
         // Recorremos todas las celdillas
         auto inkCopy = Array2<asa::Vector3>(inkRGB);
 
-        auto &uRef = getVelocityX();
-        auto &vRef = getVelocityY();
         for (int i = 0; i < grid.getSize().x; i++) {
             for (int j = 0; j < grid.getSize().y; j++) {
                 // Convierto el i j a la posicion
                 auto index = Index2(i, j);
                 auto pos = grid.getCellPos(index);
                 // pos es x, y del espacio
-                auto ux0 = uRef[index];
-                auto ux1 = uRef[Index2(index.x+1, index.y)];
+                auto ux0 = velocityX[index];
+                auto ux1 = velocityX[Index2(index.x + 1, index.y)];
                 
-                auto uy0 = vRef[index];
-                auto uy1 = vRef[Index2(index.x, index.y + 1)];
+                auto uy0 = velocityY[index];
+                auto uy1 = velocityY[Index2(index.x, index.y + 1)];
 
                 auto v = lerp(uy0, uy1, 0.5f);
                 auto u = lerp(ux0, ux1, 0.5f);
@@ -50,43 +48,49 @@ void Fluid2::fluidAdvection(const float dt)
                 auto oldCell = grid.getCellIndex(oldPos);
                 auto oldIndex = Index2(oldCell.x, oldCell.y);
                 auto oldCellPos = grid.getCellPos(oldIndex);
-                Index2 aa, ab, ba, bb;
-                if (oldPos.x > oldCellPos.x && oldPos.y > oldCellPos.y) {
-                    aa = oldIndex;
-                    ba = right(oldIndex);
-                    ab = up(oldIndex);                    
-                    bb = right(up(oldIndex));                    
-                } else if (oldPos.x > oldCellPos.x && oldPos.y < oldCellPos.y) {
-                    aa = down(oldIndex);                    
-                    ba = left(down(oldIndex));                    
-                    ab = oldIndex;
-                    bb = right(oldIndex);                    
-                } else if (oldPos.x < oldCellPos.x && oldPos.y > oldCellPos.y) {
-                    aa = left(oldIndex);                    
-                    ba = oldIndex;
-                    ab = left(down(oldIndex));                    
-                    bb = up(oldIndex);                    
+                Vector3 newVal;
+                if (oldCellPos.x == oldPos.x && oldCellPos.y == oldPos.y) {
+                    // Si despues de aplicar la velocidad a la inversa, no he cambiado de posicion, el color es el mismo que tenia
+                    newVal = inkCopy[index];
                 } else {
-                    aa = left(down(oldIndex));                    
-                    ba = down(oldIndex);                    
-                    ab = left(oldIndex);                    
-                    bb = oldIndex;
-                }      
+                    Index2 aa, ab, ba, bb;
+                    if (oldPos.x > oldCellPos.x && oldPos.y > oldCellPos.y) {
+                        aa = oldIndex;
+                        ba = right(oldIndex);
+                        ab = up(oldIndex);
+                        bb = right(up(oldIndex));
+                    } else if (oldPos.x > oldCellPos.x && oldPos.y < oldCellPos.y) {
+                        aa = down(oldIndex);
+                        ba = left(down(oldIndex));
+                        ab = oldIndex;
+                        bb = right(oldIndex);
+                    } else if (oldPos.x < oldCellPos.x && oldPos.y > oldCellPos.y) {
+                        aa = left(oldIndex);
+                        ba = oldIndex;
+                        ab = left(down(oldIndex));
+                        bb = up(oldIndex);
+                    } else {
+                        aa = left(down(oldIndex));
+                        ba = down(oldIndex);
+                        ab = left(oldIndex);
+                        bb = oldIndex;
+                    }
 
-                auto aaPos = grid.getCellPos(aa);
-                float tx = oldPos.x - aaPos.x;
-                tx = clamp(tx, 0, 1);
-                float ty = oldPos.y - aaPos.y;
-                ty = clamp(ty, 0, 1);
+                    auto aaPos = grid.getCellPos(aa);
+                    float tx = oldPos.x - aaPos.x;
+                    tx = clamp(tx, 0, 1);
+                    float ty = oldPos.y - aaPos.y;
+                    ty = clamp(ty, 0, 1);
+
+                    auto inkAA = inkCopy.getValue(aa);
+                    auto inkBA = inkCopy.getValue(ba);
+                    auto inkAB = inkCopy.getValue(ab);
+                    auto inkBB = inkCopy.getValue(bb);
+
+                    auto newVal = bilerp(inkAA, inkBA, inkAB, inkBB, tx, ty);
+                }
                 
-                auto inkAA = inkCopy.getValue(aa);
-                auto inkBA = inkCopy.getValue(ba);
-                auto inkAB = inkCopy.getValue(ab);                
-                auto inkBB = inkCopy.getValue(bb);
-
-                auto newVal = bilerp(
-                    inkAA, inkBA, inkAB, inkBB, tx, ty);
-                inkRGB.setValue(index, newVal);                
+                inkRGB[index] = newVal;                
                 // Primero obtengo la velocidad en esta posicion
                 // interpolar los valores, sumar los valores y dividir entre dos por cada eje 
 
@@ -193,6 +197,7 @@ void Fluid2::fluidAdvection(const float dt)
                 auto uBB = uCopy.getValue(bbU);
 
                 auto newUVal = bilerp(uAA, uBA, uAB, uBB, txU, tyU);
+                velocityX.setValue(index, newUVal);
 
                 if (oldVPos.x > oldVCellPos.x && oldVPos.y > oldVCellPos.y) {
                     aaV = oldVIndex;
@@ -227,8 +232,8 @@ void Fluid2::fluidAdvection(const float dt)
                 auto vAB = vCopy.getValue(abV);
                 auto vBB = vCopy.getValue(bbV);
 
-                auto newVVal = bilerp(vAA, vBA, vAB, vBB, txV, tyV);                
-                // uRef[index] = newVal;
+                auto newVVal = bilerp(vAA, vBA, vAB, vBB, txV, tyV);                      
+                velocityY.setValue(index, newVVal);                
             }
         }
     }
@@ -242,7 +247,24 @@ void Fluid2::fluidEmission()
         // Aqui configuramos los emisores donde queramos
 
         // Basicamente es poner donde queramos unos bounding boxes que metan velocidades y tintas
-        // Ver la funcion de Scene donde se genera unos emisores de prueba
+        // Ver la funcion de Scene donde se genera unos emisores de prueba        
+        /*for (uint i = 2; i < inkRGB.getSize().x / 4; ++i)
+            for (uint j = 2; j < inkRGB.getSize().y / 4; ++j)
+                inkRGB[Index2(i, j)] = Vector3(1, 1, 0);
+
+        Array2<float> &u = velocityX;
+        for (uint i = 0; i < u.getSize().x; ++i)
+            for (uint j = 0; j < u.getSize().y; ++j)
+                u[Index2(i, j)] = 2.0f;
+
+        Array2<float> &v = velocityY;
+        for (uint i = 0; i < v.getSize().x; ++i)
+            for (uint j = 0; j < v.getSize().y; ++j)
+                v[Index2(i, j)] = 2.0f;*/
+
+        inkRGB[Index2(0, 0)] = Vector3(1, 0, 1);
+        velocityX[Index2(0, 0)] = 1.0f;
+        velocityY[Index2(0, 0)] = 1.0f;
     }
 }
 
@@ -253,6 +275,14 @@ void Fluid2::fluidVolumeForces(const float dt)
 
         // Aplicamos la formula de la diapositiva 31, solo hay que actualizar las velocidades en y
         // velocidad en y = velicidad en n * dt * -9.81
+        /*auto vCopy = Array2<float>(getVelocityY());
+        for (int i = 0; i < grid.getSize().x; i++) {
+            for (int j = 0; j < grid.getSize().y; j++) {
+                auto index = Index2(i, j);
+                velocityY[index] = vCopy[index] * dt * -Scene::kGravity;
+            }
+        }*/
+
     }
 }
 
@@ -265,6 +295,26 @@ void Fluid2::fluidViscosity(const float dt)
     // Array tiene copia implementada
     if (Scene::testcase >= Scene::SMOKE) {
         // Viscosity term HERE
+        /*auto uCopy = Array2<float>(getVelocityX());
+        auto vCopy = Array2<float>(getVelocityY());
+
+        for (int i = 0; i < grid.getSize().x; i++) {
+            for (int j = 0; j < grid.getSize().y; j++) {
+                auto index = Index2(i, j);
+                auto u = uCopy[index];
+                auto v = vCopy[index];
+
+                auto fooU =
+                    (uCopy[right(index)] - (2 * u) + uCopy[left(index)]) / grid.getCellDx().x * grid.getCellDx().x;
+                auto fooV =
+                    (vCopy[right(index)] - (2 * v) + vCopy[left(index)]) / grid.getCellDx().y * grid.getCellDx().y;
+                auto newU = u * (dt / Scene::kDensity) * Scene::kViscosity * fooU;
+                auto newV = v * (dt / Scene::kDensity) * Scene::kViscosity * fooV;
+
+                velocityX[index] = newU;
+                velocityY[index] = newV;
+            }
+        }*/
     }
 }
 
