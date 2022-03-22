@@ -33,10 +33,10 @@ void Fluid2::fluidAdvection(const float dt)
                 auto pos = grid.getCellPos(index);
                 // pos es x, y del espacio
                 auto ux0 = velocityX[index];
-                auto ux1 = velocityX[Index2(index.x + 1, index.y)];
+                auto ux1 = velocityX[right(index)];
                 
                 auto uy0 = velocityY[index];
-                auto uy1 = velocityY[Index2(index.x, index.y + 1)];
+                auto uy1 = velocityY[up(index)];
 
                 auto v = lerp(uy0, uy1, 0.5f);
                 auto u = lerp(ux0, ux1, 0.5f);
@@ -87,7 +87,7 @@ void Fluid2::fluidAdvection(const float dt)
                     auto inkAB = inkCopy.getValue(ab);
                     auto inkBB = inkCopy.getValue(bb);
 
-                    auto newVal = bilerp(inkAA, inkBA, inkAB, inkBB, tx, ty);
+                    newVal = bilerp(inkAA, inkBA, inkAB, inkBB, tx, ty);
                 }
                 
                 inkRGB[index] = newVal;                
@@ -124,10 +124,8 @@ void Fluid2::fluidAdvection(const float dt)
             }
         }*/
 
-        auto uCopy = Array2<float>(getVelocityX());
-        auto vCopy = Array2<float>(getVelocityY());
-        auto &uRef = getVelocityX();
-        auto &vRef = getVelocityY();
+        auto uCopy = Array2<float>(velocityX);
+        auto vCopy = Array2<float>(velocityY);        
         
         for (int i = 0; i < grid.getSize().x; i++) {
             for (int j = 0; j < grid.getSize().y; j++) {
@@ -138,10 +136,10 @@ void Fluid2::fluidAdvection(const float dt)
 
                 // pos es x, y del espacio
                 auto ux0 = uCopy[index];
-                auto ux1 = uCopy[Index2(index.x + 1, index.y)];
+                auto ux1 = uCopy[right(index)];
 
                 auto uy0 = vCopy[index];
-                auto uy1 = vCopy[Index2(index.x, index.y + 1)];
+                auto uy1 = vCopy[up(index)];
 
                 auto v = lerp(uy0, uy1, 0.5f);
                 auto u = lerp(ux0, ux1, 0.5f);
@@ -151,8 +149,8 @@ void Fluid2::fluidAdvection(const float dt)
                 auto oldVPos = Vector2(vPos.x - (dt * u), vPos.y - (dt * v));
 
                 // Interpolo el valor entre los 4 puntos circundantes
-                auto oldUCell = grid.getCellIndex(oldUPos);
-                auto oldVCell = grid.getCellIndex(oldVPos);
+                auto oldUCell = grid.getFaceIndex(oldUPos, 0);                
+                auto oldVCell = grid.getFaceIndex(oldVPos, 1);
 
                 auto oldUIndex = Index2(oldUCell.x, oldUCell.y);
                 auto oldVIndex = Index2(oldVCell.x, oldVCell.y);
@@ -162,78 +160,87 @@ void Fluid2::fluidAdvection(const float dt)
 
                 Index2 aaU, abU, baU, bbU;
                 Index2 aaV, abV, baV, bbV;
+                float newUVal, newVVal;
 
-                if (oldUPos.x > oldUCellPos.x && oldUPos.y > oldUCellPos.y) {
-                    aaU = oldUIndex;
-                    baU = right(oldUIndex);
-                    abU = up(oldUIndex);
-                    bbU = right(up(oldUIndex));
-                } else if (oldUPos.x > oldUCellPos.x && oldUPos.y < oldUCellPos.y) {
-                    aaU = down(oldUIndex);
-                    baU = left(down(oldUIndex));
-                    abU = oldUIndex;
-                    bbU = right(oldUIndex);
-                } else if (oldUPos.x < oldUCellPos.x && oldUPos.y > oldUCellPos.y) {
-                    aaU = left(oldUIndex);
-                    baU = oldUIndex;
-                    abU = left(down(oldUIndex));
-                    bbU = up(oldUIndex);
+                if (uPos.x == oldUPos.x && uPos.y == oldUPos.y) {
+                    newUVal = uCopy[index];
                 } else {
-                    aaU = left(down(oldUIndex));
-                    baU = down(oldUIndex);
-                    abU = left(oldUIndex);
-                    bbU = oldUIndex;
+                    if (oldUPos.x > oldUCellPos.x && oldUPos.y > oldUCellPos.y) {
+                        aaU = oldUIndex;
+                        baU = right(oldUIndex);
+                        abU = up(oldUIndex);
+                        bbU = right(up(oldUIndex));
+                    } else if (oldUPos.x > oldUCellPos.x && oldUPos.y < oldUCellPos.y) {
+                        aaU = down(oldUIndex);
+                        baU = left(down(oldUIndex));
+                        abU = oldUIndex;
+                        bbU = right(oldUIndex);
+                    } else if (oldUPos.x < oldUCellPos.x && oldUPos.y > oldUCellPos.y) {
+                        aaU = left(oldUIndex);
+                        baU = oldUIndex;
+                        abU = left(down(oldUIndex));
+                        bbU = up(oldUIndex);
+                    } else {
+                        aaU = left(down(oldUIndex));
+                        baU = down(oldUIndex);
+                        abU = left(oldUIndex);
+                        bbU = oldUIndex;
+                    }
+
+                    auto aaUPos = grid.getCellPos(aaU);
+                    float txU = oldUPos.x - aaUPos.x;
+                    txU = clamp(txU, 0, 1);
+                    float tyU = oldUPos.y - aaUPos.y;
+                    tyU = clamp(tyU, 0, 1);
+
+                    auto uAA = uCopy[aaU];
+                    auto uBA = uCopy[baU];
+                    auto uAB = uCopy[abU];
+                    auto uBB = uCopy[bbU];
+
+                    newUVal = bilerp(uAA, uBA, uAB, uBB, txU, tyU);
                 }
+                velocityX[index] = newUVal;
 
-                auto aaUPos = grid.getCellPos(aaU);
-                float txU = oldUPos.x - aaUPos.x;
-                txU = clamp(txU, 0, 1);
-                float tyU = oldUPos.y - aaUPos.y;
-                tyU = clamp(tyU, 0, 1);
-
-                auto uAA = uCopy.getValue(aaU);
-                auto uBA = uCopy.getValue(baU);
-                auto uAB = uCopy.getValue(abU);
-                auto uBB = uCopy.getValue(bbU);
-
-                auto newUVal = bilerp(uAA, uBA, uAB, uBB, txU, tyU);
-                velocityX.setValue(index, newUVal);
-
-                if (oldVPos.x > oldVCellPos.x && oldVPos.y > oldVCellPos.y) {
-                    aaV = oldVIndex;
-                    baV = right(oldVIndex);
-                    abV = up(oldVIndex);
-                    bbV = right(up(oldVIndex));
-                } else if (oldUPos.x > oldVCellPos.x && oldVPos.y < oldVCellPos.y) {
-                    aaV = down(oldVIndex);
-                    baV = left(down(oldVIndex));
-                    abV = oldVIndex;
-                    bbV = right(oldVIndex);
-                } else if (oldUPos.x < oldVCellPos.x && oldVPos.y > oldVCellPos.y) {
-                    aaV = left(oldVIndex);
-                    baV = oldVIndex;
-                    abV = left(down(oldVIndex));
-                    bbV = up(oldVIndex);
+                if (vPos.x == oldVPos.x && vPos.y == oldVPos.y) {
+                    newVVal = vCopy[index];
                 } else {
-                    aaV = left(down(oldVIndex));
-                    baV = down(oldVIndex);
-                    abV = left(oldVIndex);
-                    bbV = oldVIndex;
+                    if (oldVPos.x > oldVCellPos.x && oldVPos.y > oldVCellPos.y) {
+                        aaV = oldVIndex;
+                        baV = right(oldVIndex);
+                        abV = up(oldVIndex);
+                        bbV = right(up(oldVIndex));
+                    } else if (oldVPos.x > oldVCellPos.x && oldVPos.y < oldVCellPos.y) {
+                        aaV = down(oldVIndex);
+                        baV = left(down(oldVIndex));
+                        abV = oldVIndex;
+                        bbV = right(oldVIndex);
+                    } else if (oldVPos.x < oldVCellPos.x && oldVPos.y > oldVCellPos.y) {
+                        aaV = left(oldVIndex);
+                        baV = oldVIndex;
+                        abV = left(down(oldVIndex));
+                        bbV = up(oldVIndex);
+                    } else {
+                        aaV = left(down(oldVIndex));
+                        baV = down(oldVIndex);
+                        abV = left(oldVIndex);
+                        bbV = oldVIndex;
+                    }
+
+                    auto aaVPos = grid.getCellPos(aaV);
+                    float txV = oldVPos.x - aaVPos.x;
+                    txV = clamp(txV, 0, 1);
+                    float tyV = oldVPos.y - aaVPos.y;
+                    tyV = clamp(tyV, 0, 1);
+
+                    auto vAA = vCopy[aaV];
+                    auto vBA = vCopy[baV];
+                    auto vAB = vCopy[abV];
+                    auto vBB = vCopy[bbV];
+
+                    newVVal = bilerp(vAA, vBA, vAB, vBB, txV, tyV);
                 }
-
-                auto aaVPos = grid.getCellPos(aaV);
-                float txV = oldVPos.x - aaVPos.x;
-                txV = clamp(txV, 0, 1);
-                float tyV = oldVPos.y - aaVPos.y;
-                tyV = clamp(tyV, 0, 1);
-
-                auto vAA = vCopy.getValue(aaV);
-                auto vBA = vCopy.getValue(baV);
-                auto vAB = vCopy.getValue(abV);
-                auto vBB = vCopy.getValue(bbV);
-
-                auto newVVal = bilerp(vAA, vBA, vAB, vBB, txV, tyV);                      
-                velocityY.setValue(index, newVVal);                
+                velocityY[index] = newVVal;                
             }
         }
     }
@@ -263,7 +270,7 @@ void Fluid2::fluidEmission()
                 v[Index2(i, j)] = 2.0f;*/
 
         inkRGB[Index2(0, 0)] = Vector3(1, 0, 1);
-        velocityX[Index2(0, 0)] = 1.0f;
+        velocityX[Index2(0, 0)] = 0.0f;
         velocityY[Index2(0, 0)] = 1.0f;
     }
 }
