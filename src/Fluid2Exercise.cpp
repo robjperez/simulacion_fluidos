@@ -222,13 +222,18 @@ void Fluid2::fluidEmission()
             for (uint j = 0; j < v.getSize().y; ++j)
                 v[Index2(i, j)] = 2.0f;*/
         auto size = grid.getSize();
-        for (int i = (size.x / 2) - 10; i < (size.x / 2) + 10; i++) {
+        for (int i = (size.x / 2) - 4; i < (size.x / 2) + 4; i++) {
         //for (int i = 0; i < 10; i++) {
-            for (int j = 5; j < 10; j++) {
+            for (int j = 5; j < 30; j++) {
             //for (int j = 0; j < 10; j++) {
                 auto idx = Index2(i, j);
-                inkRGB[idx] = Vector3(1, 0, 1);
-                velocityY[idx] = 5.0f;
+            if (i < size.x / 2) {
+                    inkRGB[idx] = Vector3(1, 0, 1);
+            } else {
+                inkRGB[idx] = Vector3(1, 1, 0);
+            }
+                
+                velocityY[idx] = 10.0f;
                 velocityX[idx] = 0.0f;
             }
         }    
@@ -242,18 +247,13 @@ void Fluid2::fluidVolumeForces(const float dt)
 
         // Aplicamos la formula de la diapositiva 31, solo hay que actualizar las velocidades en y
         // velocidad en y = velicidad en n * dt * -9.81
-        //auto vCopy = Array2<float>(velocityY);
-        for (int i = 0; i < grid.getSizeFacesX().x; i++) {
+        
+        for (int i = 0; i < grid.getSizeFacesY().x; i++) {
             for (int j = 0; j < grid.getSizeFacesY().y; j++) {
                 auto index = Index2(i, j);
                 velocityY[index] += dt * Scene::kGravity;  // La gravedad ya esta definida con -
             }
         }
-        
-        //int tam = velocityY.getSize().x * velocityY.getSize().y;
-
-        //for (int i = 0; i < tam; i++)
-        //    velocityY[i] += dt * Scene::kGravity;
     }
 }
 
@@ -266,94 +266,59 @@ void Fluid2::fluidViscosity(const float dt)
     // Array tiene copia implementada
     if (Scene::testcase >= Scene::SMOKE) {
         // Viscosity term HERE
-        /*auto uCopy = Array2<float>(velocityX);
-        auto vCopy = Array2<float>(velocityY);
+        auto uCopy(velocityX);
+        auto vCopy(velocityY);
+        auto &sizeU = velocityX.getSize();
+        auto &sizeV = velocityY.getSize();
+        auto dx = grid.getCellDx();
+        auto c = (dt * Scene::kViscosity) / Scene::kDensity;
 
-        for (int i = 0; i < grid.getSizeFacesX().x; i++) {
-            for (int j = 0; j < grid.getSizeFacesY().y; j++) {
+        // Calculamos la parte U del vector
+        for (int i = 0; i < sizeU.x; i++) {
+            for (int j = 0; j < sizeU.y; j++) {
                 auto index = Index2(i, j);
+                if (i == 0 || j == 0 || i == sizeU.x - 1 || j == sizeU.y - 1) {
+                    velocityX[index] = 0;
+                    continue;
+                }
+                
                 auto u = uCopy[index];
+
+                auto rightU = uCopy[Index2(clamp(i + 1, 0, sizeU.x - 1), j)];
+                auto leftU = uCopy[Index2(clamp(i - 1, 0, sizeU.x - 1), j)];
+                auto upU = uCopy[Index2(i, clamp(j + 1, 0, sizeU.y - 1))];
+                auto downU = uCopy[Index2(i, clamp(j - 1, 0, sizeU.y - 1))];
+
+                auto difU1 = (rightU - 2.0f * u + leftU) / (dx.x * dx.x);
+                auto difU2 = (upU - 2.0f * u + downU) / (dx.y * dx.y);
+                auto difU = difU1 + difU2;
+                
+                velocityX[index] = u + (c * difU);
+            }
+        }
+
+        // Calculamos la parte V del vector
+        for (int i = 0; i < sizeV.x; i++) {
+            for (int j = 0; j < sizeV.y; j++) {
+                auto index = Index2(i, j);
+                if (i == 0 || j == 0 || i == sizeV.x - 1 || j == sizeV.y - 1) {
+                    velocityY[index] = 0;
+                    continue;
+                }
                 auto v = vCopy[index];
 
-                auto difUX =
-                    (uCopy[right(index)] - (2 * u) + uCopy[left(index)]) / (grid.getCellDx().x * grid.getCellDx().x);
-                auto difUY =
-                    (uCopy[up(index)] - (2 * u) + uCopy[down(index)]) / (grid.getCellDx().y * grid.getCellDx().y);
-                auto difVX =
-                    (vCopy[right(index)] - (2 * v) + vCopy[left(index)]) / (grid.getCellDx().x * grid.getCellDx().x);
-                auto difVY =
-                    (vCopy[up(index)] - (2 * v) + vCopy[down(index)]) / (grid.getCellDx().y * grid.getCellDx().y);
-                auto difU = difUX + difUY;
-                auto difV = difVX + difVY;
-                auto newU = u + ((dt / Scene::kDensity) * Scene::kViscosity * difU);
-                auto newV = v + ((dt / Scene::kDensity) * Scene::kViscosity * difV);
+                auto rightV = vCopy[Index2(clamp(i + 1, 0, sizeV.x - 1), j)];
+                auto leftV = vCopy[Index2(clamp(i - 1, 0, sizeV.x - 1), j)];
+                auto upV = vCopy[Index2(i, clamp(j + 1, 0, sizeV.y - 1))];
+                auto downV = vCopy[Index2(i, clamp(j - 1, 0, sizeV.y - 1))];
 
-                velocityX[index] = newU;
-                velocityY[index] = newV;
+                auto difV1 = (rightV - 2.0f * v + leftV) / (dx.x * dx.x);
+                auto difV2 = (upV - 2.0f * v + downV) / (dx.y * dx.y);
+                auto difV = difV1 + difV2;
+                
+                velocityY[index] = v + (c * difV);
             }
-        }*/
-        Vector2 cellDx = grid.getCellDx();
-
-        Index2 faceSizeX = grid.getSizeFacesX();
-        Index2 faceSizeY = grid.getSizeFacesY();
-
-        Array2<float> horizontalV(velocityX.getSize());
-        float density = Scene::kDensity;
-        float viscosity = Scene::kViscosity;
-        for (int i = 0; i < faceSizeX.x; i++) {
-            for (int j = 0; j < faceSizeX.y; j++) {
-                Index2 p(i, j);
-
-                //	(i,j)
-                float V_ij = check(p, velocityX);
-                //	(i+1,j)
-                float V_right = check(Index2(p.x + 1, p.y), velocityX);
-                //	(i-1,j)
-                float V_left = check(Index2(p.x - 1, p.y), velocityX);
-                //	(i,j+1)
-                float V_up = check(Index2(p.x, p.y + 1), velocityX);
-                //	(i,j-1)
-                float V_down = check(Index2(p.x, p.y - 1), velocityX);
-
-                float value = V_ij + (dt / density) * viscosity *
-                                         (((V_right - 2.0f * V_ij + V_left) / (cellDx.x * cellDx.x)) +
-                                          ((V_up - 2.0f * V_ij + V_down) / (cellDx.y * cellDx.y)));
-
-                Index2 sz = horizontalV.getSize();
-                if (p.x > 0 && p.x < sz.x - 1 && p.y >= 0 && p.y < sz.y) {
-                    horizontalV[p] = value;
-                }
-            }
-        }
-
-        Array2<float> verticalV(velocityY.getSize());
-        for (int i = 0; i < faceSizeY.x; i++) {
-            for (int j = 0; j < faceSizeY.y; j++) {
-                Index2 p(i, j);
-
-                //	(i,j)
-                float V_ij = check(p, velocityY);
-                //	(i+1,j)
-                float V_right = check(Index2(p.x + 1, p.y), velocityY);
-                //	(i-1,j)
-                float V_left = check(Index2(p.x - 1, p.y), velocityY);
-                //	(i,j+1)
-                float V_up = check(Index2(p.x, p.y + 1), velocityY);
-                //	(i,j-1)
-                float V_down = check(Index2(p.x, p.y - 1), velocityY);
-
-                float value = V_ij + (dt / density) * viscosity *
-                                         (((V_right - 2.0f * V_ij + V_left) / (cellDx.x * cellDx.x)) +
-                                          ((V_up - 2.0f * V_ij + V_down) / (cellDx.y * cellDx.y)));
-
-                Index2 sz = verticalV.getSize();
-                if (p.x >= 0 && p.x < sz.x && p.y > 0 && p.y < sz.y - 1) {
-                    verticalV[p] = value;
-                }
-            }
-        }
-        velocityX = horizontalV;
-        velocityY = verticalV;
+        }            
     }
 }
 
@@ -390,7 +355,7 @@ void Fluid2::fluidPressureProjection(const float dt)
         // Por cada velocidad tanto en x como en y, las actualizo usando la formula de la pag 19
         // Cuidado con las condiciones de contorno. Clampeo los indices, -1 pasa a 0 o 101 a 100
         // nueva velocidad = velocidad antigua - dt / densidad * Pi+1,j - Pi,j / dx
-        /*float density = Scene::kDensity;
+        float density = Scene::kDensity;
         double res;
         int volt;
 
@@ -492,7 +457,7 @@ void Fluid2::fluidPressureProjection(const float dt)
             }
         }
         velocityX = velX;
-        velocityY = velY;*/
+        velocityY = velY;
     }
 }
 
