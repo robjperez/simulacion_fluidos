@@ -6,16 +6,6 @@ namespace asa
 {
 namespace
 {
-    // TODO!!!
-    // REMOVE THIS FUNCTION!
-float check(Index2 &a, Array2<float> &b)
-{
-    Index2 sz = b.getSize();
-    if (a.x >= 0 && a.x < sz.x && a.y >= 0 && a.y < sz.y)
-        return b[a];
-    else
-        return 0.0f;
-}
 
 template<class T>
 T value_or_zero(const Index2 &index, const Array2<T> &data)
@@ -37,11 +27,12 @@ bool is_inbounds(const Index2 &a, const Index2 &b)
 }
 
 
+
+
 ////////////////////////////////////////////////
 // Add any reusable classes or functions HERE //
 ////////////////////////////////////////////////
 }  // namespace
-
 
 Index2 Fluid2::left(Index2 &index)
 {
@@ -66,13 +57,6 @@ void Fluid2::fluidAdvection(const float dt)
     auto minPos = grid.getDomain().minPosition;
     auto maxPos = grid.getDomain().maxPosition;
     {
-        // Ojo que la rejilla esta desplazada
-
-        // Ink advecion HERE
-
-        // Primero nos copiamos toda la tinta a otro Array2
-        // Para los calculos usamos esta copia y actualizamos en la buena
-        // Recorremos todas las celdillas
         auto inkCopy = Array2<asa::Vector3>(inkRGB);
         auto size = grid.getSize();        
 
@@ -220,27 +204,20 @@ void Fluid2::fluidAdvection(const float dt)
 
 void Fluid2::fluidEmission()
 {
-    if (Scene::testcase >= Scene::SMOKE) {
-        // Emitters contribution HERE
-
-        // Aqui configuramos los emisores donde queramos
-
-        // Basicamente es poner donde queramos unos bounding boxes que metan velocidades y tintas
-        // Ver la funcion de Scene donde se genera unos emisores de prueba
+    if (Scene::testcase >= Scene::SMOKE) {        
         auto size = grid.getSize();
         int halfW = 4;
         int startY = 5;
         int height = 20;
-        for (int i = (size.x / 2) - halfW; i < (size.x / 2) + halfW; i++) {        
-            for (int j = startY; j < height; j++) {            
+
+        for (int i = (size.x / 2) - halfW; i <= (size.x / 2) + halfW; i++) {        
+            for (int j = startY; j <= height; j++) {            
                 Index2 idx(i, j);
 
                 if (i < size.x / 2) {
-                    inkRGB[idx] = Vector3(1, 0, 1);
-                    //velocityX[idx] = -2.0f;
-                } else {
-                    inkRGB[idx] = Vector3(1, 1, 0);
-                    //velocityX[idx] = 2.0f;
+                    inkRGB[idx] = Vector3(1, 0, 1);                    
+                } else if (i < (size.x / 2) + halfW) {
+                    inkRGB[idx] = Vector3(1, 1, 0);                    
                 }
                 
                 velocityY[idx] = 10.0f;
@@ -252,96 +229,22 @@ void Fluid2::fluidEmission()
 
 void Fluid2::fluidVolumeForces(const float dt)
 {
-    if (Scene::testcase >= Scene::SMOKE) {
-        // Gravity term HERE
-
-        // Aplicamos la formula de la diapositiva 31, solo hay que actualizar las velocidades en y
+    if (Scene::testcase >= Scene::SMOKE) {                
         // velocidad en y = velicidad en n * dt * -9.81
         
         for (int i = 0; i < grid.getSizeFacesY().x; i++) {
             for (int j = 0; j < grid.getSizeFacesY().y; j++) {
                 auto index = Index2(i, j);
-                velocityY[index] += dt * Scene::kGravity;  // La gravedad ya esta definida con -
+                velocityY[index] += dt * Scene::kGravity;  // OJO! La gravedad ya esta definida con -
             }
         }
     }
 }
 
 void Fluid2::fluidViscosity(const float dt)
-{
-    // Aplicamos la formula de la diapositiva 28
-    // velocidad nueva en ij = velocidad en ij + dt / densidad * viscosidad * (dif finitas de las velocidades)
-
-    // OJo si tenemos que crear una copia del array para que los datos que calculemos esten basados en el paso anterior
-    // Array tiene copia implementada
-    //if (Scene::testcase >= Scene::SMOKE) {
-    //    // viscosity
-    //    Vector2 cellDx = grid.getCellDx();
-
-    //    Index2 faceSizeX = grid.getSizeFacesX();
-    //    Index2 faceSizeY = grid.getSizeFacesY();
-
-    //    Array2<float> horizontalV(velocityX.getSize());
-    //    float density = Scene::kDensity;
-    //    float viscosity = Scene::kViscosity;
-    //    for (int i = 0; i < faceSizeX.x; i++) {
-    //        for (int j = 0; j < faceSizeX.y; j++) {
-    //            Index2 p(i, j);
-
-    //            //	(i,j)
-    //            float V_ij = check(p, velocityX);
-    //            //	(i+1,j)
-    //            float V_right = check(Index2(p.x + 1, p.y), velocityX);
-    //            //	(i-1,j)
-    //            float V_left = check(Index2(p.x - 1, p.y), velocityX);
-    //            //	(i,j+1)
-    //            float V_up = check(Index2(p.x, p.y + 1), velocityX);
-    //            //	(i,j-1)
-    //            float V_down = check(Index2(p.x, p.y - 1), velocityX);
-
-    //            float value = V_ij + (dt / density) * viscosity *
-    //                                     (((V_right - 2.0f * V_ij + V_left) / (cellDx.x * cellDx.x)) +
-    //                                      ((V_up - 2.0f * V_ij + V_down) / (cellDx.y * cellDx.y)));
-
-    //            Index2 sz = horizontalV.getSize();
-    //            if (p.x > 0 && p.x < sz.x - 1 && p.y >= 0 && p.y < sz.y) {
-    //                horizontalV[p] = value;
-    //            }
-    //        }
-    //    }
-
-    //    Array2<float> verticalV(velocityY.getSize());
-    //    for (int i = 0; i < faceSizeY.x; i++) {
-    //        for (int j = 0; j < faceSizeY.y; j++) {
-    //            Index2 p(i, j);
-
-    //            //	(i,j)
-    //            float V_ij = check(p, velocityY);
-    //            //	(i+1,j)
-    //            float V_right = check(Index2(p.x + 1, p.y), velocityY);
-    //            //	(i-1,j)
-    //            float V_left = check(Index2(p.x - 1, p.y), velocityY);
-    //            //	(i,j+1)
-    //            float V_up = check(Index2(p.x, p.y + 1), velocityY);
-    //            //	(i,j-1)
-    //            float V_down = check(Index2(p.x, p.y - 1), velocityY);
-
-    //            float value = V_ij + (dt / density) * viscosity *
-    //                                     (((V_right - 2.0f * V_ij + V_left) / (cellDx.x * cellDx.x)) +
-    //                                      ((V_up - 2.0f * V_ij + V_down) / (cellDx.y * cellDx.y)));
-
-    //            Index2 sz = verticalV.getSize();
-    //            if (p.x >= 0 && p.x < sz.x && p.y > 0 && p.y < sz.y - 1) {
-    //                verticalV[p] = value;
-    //            }
-    //        }
-    //    }
-    //    velocityX = horizontalV;
-    //    velocityY = verticalV;
-    //}
-
-    if (Scene::testcase >= Scene::SMOKE) {
-        // Viscosity term HERE
+{    
+    // u* = u + (dt / density) * viscosity * (dif. finitas de velocidades)
+    if (Scene::testcase >= Scene::SMOKE) {        
         auto uCopy(velocityX);
         auto vCopy(velocityY);
         auto &sizeU = velocityX.getSize();
@@ -400,39 +303,7 @@ void Fluid2::fluidViscosity(const float dt)
 
 void Fluid2::fluidPressureProjection(const float dt)
 {
-    if (Scene::testcase >= Scene::SMOKE) {
-        // Incompressibility / Pressure term HERE
-        // Primero calculamos el vector derecho, que son las divergencia de las velocidades
-        // Con los laterales que dan a un solido, Por cada pared, las velocidades de la pared las ponemos a 0
-        // El suelo es solido, asi que todas las velocidades del suelo las pongo a 0. las velocidades del suelo a 0, son
-        // las velocidades que tienen la y a 0 lo mejor es tratar como condiciones de contorno solidos por los 4 lados,
-        // asi que ponemos a 0 las velocidades todos los bordes
-
-        // Calculamos el vector derecho
-        // Me creo un vector del tamaño de las incognitas, osea 100x100, 10.000 double
-        // auto b = new Vector<double>(10000)
-        // Metemos en cada elemento la divergencia de la velocidad por la constante
-
-        // Ahora construyo la matrix de coeficientes
-        // new MatrixDispersa de 10.000 x 10.000
-        // Relleno los elementos de matriz con el esquema de la pagina 18 de las diapositivas. Matrix de double tambien
-
-        // Con matrix y vector b, me creo un PCGSolver para resolver el sistema, antes me creo el vector de
-        // incognitas, 10.000, y lo inicializamos a 0 igual merece la pena bajar a 25x25 para debuggear
-
-        // Llamo a solve y ya tengo el vector de p
-
-        // Con las presiones resueltas, tengo que actualizar las velocidades
-        // Primero meto el vector de p, en la variable pressure que es un campo 2d de los valores
-        // El array tiene un getData, que es un puntero y podemos recorrerlo de i a 10.000 para actualizar todos los
-        // valores
-
-        // Parte final es diapositiva 19
-        // Por cada velocidad tanto en x como en y, las actualizo usando la formula de la pag 19
-        // Cuidado con las condiciones de contorno. Clampeo los indices, -1 pasa a 0 o 101 a 100
-        // nueva velocidad = velocidad antigua - dt / densidad * Pi+1,j - Pi,j / dx
-
-        
+    if (Scene::testcase >= Scene::SMOKE) {        
         // Ponemos a 0 las velocidades de los bordes simulando paredes
         for (int i = 0; i < velocityX.getSize().x; i++) {
             velocityX[Index2(i, 0)] = 0;
@@ -454,6 +325,7 @@ void Fluid2::fluidPressureProjection(const float dt)
         auto& size = grid.getSize();
         auto& dx = grid.getCellDx();
 
+        // Sistema de ec. lineales a resolver: A * p = b       
         std::vector<double> b(size.x * size.y);
         std::vector<double> p(size.x * size.y);
         SparseMatrix<double> A(size.x * size.y);
@@ -492,10 +364,10 @@ void Fluid2::fluidPressureProjection(const float dt)
                 // En las esquinas, como hay paredes por los lados
                 // La derivada es 0 y el valor es diferente
                 if (i == 0 || i == size.x - 1) {
-                    xVal = 1 * invDx;
+                    xVal = invDx;
                 }
                 if (j == 0 || j == size.y - 1) {
-                    yVal = 1 * invDy;
+                    yVal = invDy;
                 }
                 A.set_element(linIndex, linIndex, 2 * invDx + 2 * invDy);
 
@@ -530,7 +402,7 @@ void Fluid2::fluidPressureProjection(const float dt)
         int iterations;
         solver.solve(A, b, p, residual_out, iterations);
 
-        // Actualizamos las presiones
+        // Con la solucion, actualizamos las presiones
         for (int i = 0; i < size.x; i++) {
             for (int j = 0; j < size.y; j++) {
                 Index2 index(i, j);
