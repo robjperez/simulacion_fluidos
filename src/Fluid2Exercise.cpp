@@ -26,30 +26,7 @@ bool is_inbounds(const Index2 &a, const Index2 &b)
     return a.x < b.x - 1 && a.x >= 0 && a.y < b.y - 1 && a.y >= 0;
 }
 
-
-
-
-////////////////////////////////////////////////
-// Add any reusable classes or functions HERE //
-////////////////////////////////////////////////
 }  // namespace
-
-Index2 Fluid2::left(Index2 &index)
-{
-    return Index2(clamp(index.x - 1, 0, grid.getSize().x - 1), index.y);
-}
-Index2 Fluid2::right(Index2 &index)
-{
-    return Index2(clamp(index.x + 1, 0, grid.getSize().x - 1), index.y);
-}
-Index2 Fluid2::up(Index2 &index)
-{
-    return Index2(index.x, clamp(index.y + 1, 0, grid.getSize().y - 1));
-}
-Index2 Fluid2::down(Index2 &index)
-{
-    return Index2(index.x, clamp(index.y - 1, 0, grid.getSize().y - 1));
-}
 
 // advection
 void Fluid2::fluidAdvection(const float dt)
@@ -57,8 +34,8 @@ void Fluid2::fluidAdvection(const float dt)
     auto minPos = grid.getDomain().minPosition;
     auto maxPos = grid.getDomain().maxPosition;
     {
-        auto inkCopy = Array2<asa::Vector3>(inkRGB);
-        auto size = grid.getSize();        
+        Array2<asa::Vector3> inkCopy(inkRGB);
+        auto& size = grid.getSize();        
 
         for (int i = 0; i < size.x; i++) {
             for (int j = 0; j < size.y; j++) {
@@ -67,8 +44,8 @@ void Fluid2::fluidAdvection(const float dt)
                 auto pos = grid.getCellPos(index);
                 // pos es x, y del espacio
 
-                auto u = (velocityX[index] + velocityX[right(index)]) / 2;
-                auto v = (velocityY[index] + velocityY[up(index)]) / 2;
+                auto u = (velocityX[index] + velocityX[Index2(clamp(index.x + 1, 0, size.x), index.y)]) / 2;
+                auto v = (velocityY[index] + velocityY[Index2(index.x, clamp(index.y + 1, 0, size.y))]) / 2;
 
                 // Calculo la posicion antigua. 
                 auto oldPos = pos - (dt * Vector2(u, v));
@@ -109,13 +86,7 @@ void Fluid2::fluidAdvection(const float dt)
                     clamp(oldEndPos.y, 0, size.y - 1))];                
 
                 auto newVal = bilerp(inkAA, inkBA, inkAB, inkBB, t.x, t.y);                
-                inkRGB[index] = newVal;
-                // Primero obtengo la velocidad en esta posicion
-                // interpolar los valores, sumar los valores y dividir entre dos por cada eje
-
-                // Una vez tengo los valores, ya tengo u, y v para hacer la posicion en x(t - dt)
-
-                // Ahora x es posicion del espacio, hay que convertir a indices del grid
+                inkRGB[index] = newVal;                
             }
         }
     }
@@ -363,13 +334,13 @@ void Fluid2::fluidPressureProjection(const float dt)
                 auto yVal = 2 * invDy;
                 // En las esquinas, como hay paredes por los lados
                 // La derivada es 0 y el valor es diferente
-                if (i == 0 || i == size.x - 1) {
+                if (i == 0 && j == 0) {
                     xVal = invDx;
                 }
-                if (j == 0 || j == size.y - 1) {
+                if (i == size.x - 1 && j == size.y - 1) {
                     yVal = invDy;
-                }
-                A.set_element(linIndex, linIndex, 2 * invDx + 2 * invDy);
+                }                
+                A.set_element(linIndex, linIndex, xVal + yVal);
 
                 // A la izquierda
                 if (i > 0) {
